@@ -1,38 +1,82 @@
 from langchain_core.tools import tool
 import requests
-import os
+
+GEO_URL = "https://geocoding-api.open-meteo.com/v1/search"
+FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+TIMEOUT = 10
+
+_CITY_ALIAS = {
+    "北京": "beijing", "上海": "shanghai", "广州": "guangzhou", "深圳": "shenzhen",
+    "成都": "chengdu", "重庆": "chongqing", "天津": "tianjin", "武汉": "wuhan",
+    "西安": "xi'an", "杭州": "hangzhou", "南京": "nanjing", "苏州": "suzhou",
+    "长沙": "changsha", "郑州": "zhengzhou", "青岛": "qingdao", "大连": "dalian",
+    "厦门": "xiamen", "福州": "fuzhou", "昆明": "kunming", "哈尔滨": "harbin",
+}
+
+_WMO_ZH = {
+    0: "晴", 1: "基本晴朗", 2: "局部多云", 3: "阴",
+    45: "有雾", 48: "雾凇雾",
+    51: "小毛毛雨", 53: "毛毛雨", 55: "密集毛毛雨",
+    61: "小雨", 63: "中雨", 65: "大雨",
+    71: "小雪", 73: "中雪", 75: "大雪",
+    80: "阵雨", 81: "强阵雨", 82: "强雷阵雨",
+    95: "雷阵雨", 96: "雷阵雨伴小冰雹", 99: "雷阵雨伴大冰雹",
+}
+
+
+def _city_key(city: str) -> str:
+    city = city.strip()
+    return _CITY_ALIAS.get(city, city.replace(" ", "+").strip())
+
+
+def _weathercode_zh(code: int) -> str:
+    return _WMO_ZH.get(code, f"(天气编码 {code})")
+
 
 @tool
-def get_weather(city:str)->str:
-    """获取指定城市的当前天气信息。输入城市名称（英文），返回温度和天气情况。"""
-    api_key = os.environ.get("OPENWEATHER_API_KEY","your_api_here")
+def get_weather(city: str) -> str:
+    """获取指定城市的当前天气信息。输入城市名称（中文或英文均可），返回温度和天气情况。"""
+    if not city or not city.strip():
+        return "请提供城市名称，例如：北京 / beijing"
 
-    if not api_key:
-        return "未配置 OPENWEATHER_API_KEY 环境变量。请先注册OpenWeatherMap获取API Key."
+    query = _city_key(city)
 
-    url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={api_key}&units=metric&lang=zh_cn"
     try:
-        resp = requests.get(url,timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
+        geo_resp = requests.get(GEO_URL, params={"name": query, "count": 1, "language": "zh"}, timeout=TIMEOUT)
+        geo_resp.raise_for_status()
+        geo_data = geo_resp.json()
+        if not geo_data.get("results"):
+            return f"找不到城市 '{city}'，请检查城市名称是否正确。"
 
-        temp = data["main"]["temp"]
-        feels_like = data["main"]["feels_like"]
-        humidity = data["main"]["humidity"]
-        description = data["weather"][0]["description"]
-        wind_speed = data["wind"]["speed"]
+        loc = geo_data["results"][0]
+        lat, lon = loc["latitude"], loc["longitude"]
+        display_name = loc.get("name", city)
 
-        return(
-            f"📍 {city} 天气信息\n"
-            f"🌡️ 温度: {temp}°C (体感 {feels_like}°C)\n"
-            f"🌤️ 天气: {description}\n"
-            f"💧 湿度: {humidity}%\n"
-            f"💨 风速: {wind_speed} m/s" 
+        f_resp = requests.get(
+            FORECAST_URL,
+            params={
+                "latitude": lat, "longitude": lon,
+                "current_weather": "true",
+                "timezone": "auto",
+            },
+            timeout=TIMEOUT,
+        )
+        f_resp.raise_for_status()
+        f = f_resp.json()["current_weather"]
+
+        temp = f["temperature"]
+        wind = f.get("windspeed", "?")
+        code = f.get("weathercode", 0)
+        desc = _weathercode_zh(code)
+
+        return (
+            f"📍 {display_name} 天气信息\n"
+            f"🌡️ 温度: {temp}°C (体感约 {temp}°C)\n"
+            f"🌤️ 天气: {desc}\n"
+            f"💨 风速: {wind} km/h"
         )
 
-    except requests.exceptions.HTTPError as e:
-        if resp.status_code == 404:
-            return f"找不到城市 '{city}'，请检查城市名称是否正确（建议使用英文名）"
-        return f"获取天气失败: HTTP {resp.status_code}"
+    except requests.exceptions.Timeout:
+        return f"获取 {city} 天气超时，请稍后重试。"
     except Exception as e:
         return f"获取天气失败: {str(e)}"

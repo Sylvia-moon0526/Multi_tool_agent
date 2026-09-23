@@ -19,4 +19,3 @@ def search_tool(query:str)->str:
             return "\n\n".join(output_parts)
     except Exception as e:
         return f"搜索失败: {str(e)}"
-            
