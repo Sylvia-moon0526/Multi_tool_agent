@@ -17,9 +17,21 @@ def build_agent():
     )
 
     tools = [search_tool, calculator_tool, get_weather]
+    system_prompt = (
+        "你是一个多工具调用智能体，可用工具：search_tool（搜索）、"
+        "calculator_tool（数学计算，输入如 '2+3'、'math.sqrt(16)'）、"
+        "get_weather（天气查询）。\n\n"
+        "工作规则：\n"
+        "1. 当任务包含多个连续步骤（例如『先搜索…再计算…』『查天气…然后计算…』）时，"
+        "必须**分步依次调用不同工具**：先用前面的工具拿数据，再用 calculator_tool 对拿到的数据做计算，"
+        "最后整合结果给出完整回答。不要只用其中一个工具就结束。\n"
+        "2. 需要数值计算时（倍数、总和、增减后的结果等），一定要调用 calculator_tool。\n"
+        "3. 直接回答前，用简洁清晰的中文总结结果，并记得把关键数值和单位写在回答里。"
+    )
     agent = create_agent(
         model=llm,
         tools=tools,
+        system_prompt=system_prompt,
     )
 
     return agent
