@@ -1,19 +1,10 @@
-# README-1-Multi\_tool\_agent
-
 # 🤖 多工具调用 Agent（Multi-Tool Agent）
 
-```html
 <div align="center">
-```
 
-[Python](https://www.python.org/)
-[LangChain](https://python.langchain.com/)
-[LangGraph](https://langchain-ai.github.io/langgraph/)
-[License: MIT](LICENSE)
+[Python](https://www.python.org/) · [LangChain](https://python.langchain.com/) · [LangGraph](https://langchain-ai.github.io/langgraph/) · [License: MIT](LICENSE)
 
-```html
 </div>
-```
 
 > 基于 **LangChain + LangGraph** 构建的 ReAct（Reasoning + Acting）智能体。它能自主决策、按需组合异构工具，完成多步骤复杂任务——而不是像普通聊天机器人那样只能凭记忆回答。
 
@@ -74,19 +65,19 @@
 │              Agent（create_agent）                  │
 │  ┌──────────────────────────────────────────────┐   │
 │  │            ReAct 推理循环                     │   │
-│  │  Thought: 我需要搜索最新信息                  │   │
-│  │  Action:  调用 search_tool                   │   │
+│  │  Thought: 我需要搜索最新信息                   │   │
+│  │  Action:  调用 search_tool                    │   │
 │  │  Observation: [搜索结果...]                   │   │
-│  │  Thought: 现在我有了信息，需要计算            │   │
-│  │  Action:  调用 calculator_tool               │   │
+│  │  Thought: 现在我有了信息，需要计算             │   │
+│  │  Action:  调用 calculator_tool               │    │
 │  │  Observation: 计算结果                        │   │
-│  │  → 生成最终回复                              │   │
+│  │  → 生成最终回复                               │   │
 │  └──────────────────────────────────────────────┘   │
-│  可用工具:                                          │
-│  ├── 🔍 search_tool      (DuckDuckGo)              │
-│  ├── 🧮 calculator_tool  (安全 eval)               │
-│  └── 🌤️  get_weather     (Open-Meteo)              │
-│  LLM: Qwen/Qwen3.5-9B (SiliconFlow)                │
+│  可用工具:                                           │
+│  ├── 🔍 search_tool      (DuckDuckGo)               │
+│  ├── 🧮 calculator_tool  (安全 eval)                │
+│  └── 🌤️  get_weather     (Open-Meteo)               │
+│  LLM: Qwen/Qwen3.5-9B (SiliconFlow)                 │
 └─────────────────────────────────────────────────────┘
 ```
 
