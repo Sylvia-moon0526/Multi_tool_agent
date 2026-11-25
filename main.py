@@ -4,7 +4,7 @@ from agent import build_agent
 def main():
     print("=" * 50)
     print("🤖 多工具调用 Agent")
-    print("支持: 搜索 / 计算 / 天气查询")
+    print("支持: 搜索 / 计算 / 天气查询 / 知识库检索")
     print("输入 'quit' 退出")
     print("=" * 50)
     print()

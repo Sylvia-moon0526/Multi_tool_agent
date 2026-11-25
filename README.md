@@ -310,6 +310,49 @@ llm = init_chat_model(
 
 ---
 
+## 📚 RAG 知识库问答（新增能力）
+
+项目在原有搜索/计算/天气之外，新增 `rag_search` 工具，接入本地技术文档知识库，
+实现"检索增强生成"——Agent 遇到知识性问题会先查资料、基于来源回答，减少幻觉。
+
+### RAG 链路
+
+```
+文档 → RecursiveCharacterTextSplitter 切分(chunk=500, overlap=80)
+     → BAAI/bge-m3 向量化(SiliconFlow)
+     → Chroma 持久化 → top-k 相似度检索 → 带来源注入 LLM 生成
+```
+
+### 目录变化
+
+```
+├── knowledge_base/         # 24 篇技术概念与项目要点语料（.md）
+├── rag/
+│   └── build_kb.py         # 建库脚本（首次运行一次）
+├── tools/
+│   └── rag_tool.py         # rag_search 检索工具
+└── tests/
+    └── test_rag.py         # RAG 检索与可溯源测试
+```
+
+### 重建知识库
+
+```bash
+python rag/build_kb.py
+```
+
+首次运行需先安装新增依赖并配置 `SILICONFLOW_API_KEY`（与原有 LLM 共用同一个 Key）：
+
+```bash
+pip install -r requirements.txt
+```
+
+### 评测
+
+检索与可溯源测试见 `tests/test_rag.py`。检索命中率、答案忠实度、答案准确率等量化指标需在评测阶段实测后填写，禁止编造。
+
+---
+
 ## 📜 License
 
 MIT
