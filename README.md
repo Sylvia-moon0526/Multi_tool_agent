@@ -33,7 +33,8 @@
 | --- | --- | --- |
 | "上海今天天气怎么样？" | 调用天气工具 | 温度、天气状况、风速（Open-Meteo 实时数据） |
 | "计算 123 \* 456 + 789" | 调用计算器 | 56877 |
-| "LangChain 最新版本是什么？" | 调用搜索工具 | 前 5 条搜索结果摘要 + 来源链接 |
+| "LangChain 最新版本是什么？" | 调用搜索工具 | 前 5 条相关结果摘要 + 来源链接（双源容灾 + 相关性过滤） |
+| "ReAct 和 Function Calling 有什么区别？" | 调用 RAG 检索工具 | 带 `【来源: xxx.md】` 的知识库片段 + 末尾来源文件 |
 | "搜一下 Python 最新版本，再计算版本号数字之和" | **先搜索 → 再计算**（多步骤组合） | 端到端组合结果 |
 
 > 💡 这就是 Agent 与普通 LLM 调用的本质区别：**Agent 具备"行动能力"**——LLM 负责推理决策，框架负责执行工具并回喂结果。
@@ -46,10 +47,11 @@
 | --- | --- | --- |
 | LLM | `Qwen/Qwen3.5-9B` | 通过 SiliconFlow OpenAI 兼容接口调用（2026 年新模型，256K 上下文，支持 Tools） |
 | Agent 框架 | LangChain `create_agent` | 底层基于 LangGraph 的 ReAct 图执行 |
-| 搜索 | DuckDuckGo（`duckduckgo-search`） | 免费、无需 API Key |
+| 搜索 | `ddgs` 多后端 + Bing 双源兜底 + 相关性过滤 | 免费、无需 API Key，自动过滤错配结果 |
 | 计算 | Python `eval()` + 白名单沙箱 | 清空 `__builtins__`，只允许安全数学函数 |
 | 天气 | **Open-Meteo API** | `geocoding-api.open-meteo.com` + `api.open-meteo.com`，**免费且无需任何 API Key** |
-| 测试 | pytest | 单工具 + 多工具集成测试 |
+| RAG | `bge-m3` + Chroma | 本地知识库检索增强，带来源溯源 |
+| 测试 | pytest | 单工具 + 多工具 + RAG 集成测试 |
 
 ---
 
@@ -74,9 +76,10 @@
 │  │  → 生成最终回复                               │   │
 │  └──────────────────────────────────────────────┘   │
 │  可用工具:                                           │
-│  ├── 🔍 search_tool      (DuckDuckGo)               │
+│  ├── 🔍 search_tool      (ddgs + Bing 双源容灾)      │
 │  ├── 🧮 calculator_tool  (安全 eval)                │
-│  └── 🌤️  get_weather     (Open-Meteo)               │
+│  ├── 🌤️  get_weather     (Open-Meteo)               │
+│  └── 📚 rag_search       (本地知识库检索)            │
 │  LLM: Qwen/Qwen3.5-9B (SiliconFlow)                 │
 └─────────────────────────────────────────────────────┘
 ```
@@ -97,14 +100,20 @@
 ```
 Multi_tool_agent/
 ├── main.py                 # 入口文件，交互式命令行
-├── agent.py                # Agent 构建逻辑（LLM + 工具注册）
+├── agent.py                # Agent 构建逻辑（LLM + 工具注册 + 输出兜底）
 ├── tools/                  # 工具模块
 │   ├── __init__.py         # 统一导出
-│   ├── search.py           # 🔍 搜索工具（DuckDuckGo）
+│   ├── search.py           # 🔍 搜索工具（ddgs + Bing 双源容灾 + 相关性过滤）
 │   ├── calculator.py       # 🧮 计算器工具（安全 eval）
-│   └── weather.py          # 🌤️ 天气工具（Open-Meteo）
+│   ├── weather.py          # 🌤️ 天气工具（Open-Meteo）
+│   └── rag_tool.py         # 📚 RAG 检索工具
+├── knowledge_base/         # 24 篇技术概念与项目要点语料（.md）
+├── rag/
+│   └── build_kb.py         # 建库脚本（首次运行一次）
 ├── tests/
-│   └── test_agent.py       # 单元测试（单工具 + 多工具组合）
+│   ├── test_agent.py       # 单元测试（单工具 + 多工具组合）
+│   └── test_rag.py         # RAG 检索与可溯源测试
+├── CHANGELOG.md            # 更新日志
 ├── requirements.txt        # 依赖清单
 └── README.md
 ```
@@ -113,10 +122,13 @@ Multi_tool_agent/
 | --- | --- | --- |
 | `main.py` | 用户交互入口 | 命令行循环、异常捕获 |
 | `agent.py` | Agent 工厂函数 | `init_chat_model` 初始化、工具注册、`create_agent` |
-| `tools/search.py` | 搜索能力 | DuckDuckGo、`@tool` 装饰器 |
+| `tools/search.py` | 搜索能力 | ddgs 多后端 + Bing 双源兜底 + 查询词相关性过滤 |
 | `tools/calculator.py` | 计算能力 | 安全 `eval()`、白名单机制 |
 | `tools/weather.py` | 天气能力 | Open-Meteo REST API、中文城市别名、WMO 天气码映射 |
+| `tools/rag_tool.py` | 知识库检索能力 | 单例 retriever、top-3 检索、来源标记拼接 |
+| `rag/build_kb.py` | 建库 | 文档加载 → 切分 → bge-m3 向量化 → Chroma 落盘 |
 | `tests/test_agent.py` | 质量保障 | pytest fixture、端到端测试 |
+| `tests/test_rag.py` | RAG 质量保障 | 检索命中与来源溯源断言 |
 
 ---
 
@@ -126,7 +138,7 @@ Multi_tool_agent/
 - pip 包管理器
 - 一个 **SiliconFlow API Key**（[siliconflow.cn](https://siliconflow.cn) 注册后获取）
 
-> 💡 **天气工具无需任何 API Key**——使用 Open-Meteo 免费公开接口。搜索工具也无需 Key（DuckDuckGo）。全项目只需要一个 SiliconFlow Key。
+> 💡 **天气工具无需任何 API Key**——使用 Open-Meteo 免费公开接口。搜索工具也无需 Key（ddgs / Bing）。全项目只需要一个 SiliconFlow Key（LLM 与 Embedding 共用）。
 
 ---
 
@@ -158,7 +170,7 @@ python main.py
 ```
 ==================================================
 🤖 多工具调用 Agent
-支持: 搜索 / 计算 / 天气查询
+支持: 搜索 / 计算 / 天气查询 / 知识库检索
 输入 'quit' 退出
 ==================================================
 
@@ -182,10 +194,19 @@ Agent: 📍 Beijing 天气信息
 
 | 项目 | 说明 |
 | --- | --- |
-| 底层 | DuckDuckGo Search API（`DDGS().text(query, max_results=5)`） |
-| 优势 | 免费、无需注册 |
+| 底层 | 主路径 `ddgs` 多后端；失败/无结果时切 Bing 双源（`cn.bing.com` + `www.bing.com`）兜底 |
+| 优势 | 免费、无需注册；双源容灾，单个后端不可用自动切换 |
+| 相关性过滤 | 从查询词提取核心 token（英文词 + 中文 2-4 字词），结果的标题/摘要/链接需命中至少 1/3 才保留——挡住代理环境下搜索引擎返回的错配缓存页（如"搜 LangChain 返回 DeepL"） |
 | 输入 | 搜索关键词（`str`） |
-| 输出 | 前 5 条结果（标题 + 摘要 + 来源链接），无结果时返回提示语 |
+| 输出 | 前 5 条**相关**结果（标题 + 摘要 + 来源链接）；全部被过滤或无结果时返回提示语 |
+
+```python
+# 双源容灾 + 相关性过滤核心逻辑（tools/search.py）
+tokens = _query_tokens(query)                       # 提取查询词核心 token
+results = [r for r in ddgs_results if _is_relevant(r, tokens)]   # 先过滤 ddgs 结果
+if not results:                                     # 过滤后为空才切 Bing
+    results = _bing_search(query, 5, tokens)         # Bing 双源，同样过滤
+```
 
 ### 🧮 计算器工具 — `calculator_tool`
 
@@ -236,9 +257,14 @@ result = get_weather.invoke("Beijing")
 ## 🧪 运行测试
 
 ```bash
+# 先建库（首次必须，RAG 测试依赖）
+python rag/build_kb.py
+
+# 再跑全部测试
 pytest tests/ -v
 # 运行单个测试
 pytest tests/test_agent.py::test_calculator_tool -v
+pytest tests/test_rag.py -v
 ```
 
 | 测试用例 | 验证内容 |
@@ -246,13 +272,20 @@ pytest tests/test_agent.py::test_calculator_tool -v
 | `test_search_tool` | Agent 能调用搜索工具并返回有效结果 |
 | `test_calculator_tool` | Agent 正确计算 `123 * 456 + 789 = 56877` |
 | `test_multi_tool` | Agent 能组合多个工具完成多步骤任务 |
+| `test_rag_search_basic` | rag_search 能从知识库检索到相关内容 |
+| `test_rag_search_no_hallucination_source` | 检索结果带 `【来源: xxx.md】`，可溯源 |
+
+> 💡 建库脚本与检索工具均使用基于 `__file__` 的绝对路径，无论从哪个目录启动都指向同一向量库，避免相对路径导致的"空库"问题。
 
 ---
 
 ## 🎯 设计决策
 
-**为什么用 DuckDuckGo 而不是 Google/Bing？**
-零门槛（免费、无需 Key）、快速验证流程、替换成本低（只改 `tools/search.py` 一个文件）。
+**为什么搜索做双源 + 相关性过滤？**
+单一后端在国内网络下不稳定：`ddgs` 聚合的海外后端在代理环境下会超时或返回与查询词无关的缓存页（曾出现"搜 LangChain 返回 DeepL"）。方案是主路径 `ddgs`、失败切 Bing 双源，并在两处都做查询词相关性过滤——宁可返回"未找到"，也不输出牛头不对马嘴的内容。替换成本低，只改 `tools/search.py` 一个文件。
+
+**为什么加输出兜底 `extract_output()`？**
+模型（Qwen3.5-9B）偶发在工具调用后只生成空白 content，此时 `messages[-1].content` 是空字符串，直接打印就是"Agent:" 后什么都没有。兜底逻辑倒序找最后一条"无工具调用且有实质内容"的 AI 回答，全空才给友好提示，避免空输出。
 
 **为什么计算器用 **`eval()`** 而不是 **`sympy`**？**
 展示对 `eval()` 安全问题的理解（白名单机制），覆盖绝大多数日常计算需求。
@@ -273,8 +306,11 @@ pytest tests/test_agent.py::test_calculator_tool -v
 `KeyError: 'SILICONFLOW_API_KEY'`
 未设置环境变量，按快速开始第 4 步设置。
 
-**搜索工具返回空结果**
-DuckDuckGo 偶尔不稳定：检查网络、换关键词、稍后重试。
+**搜索工具返回空结果 / 结果不相关**
+海外搜索后端在当前网络下不稳定：先确认已切到 Bing 兜底；若结果被相关性过滤全部挡掉，说明后端返回的都是错配页，换关键词、稍后重试或检查代理设置。
+
+**Agent 偶尔输出空白**
+已由 `extract_output()` 兜底处理；若仍出现"本次未能生成回答"，是模型偶发退化，重试即可。
 
 **天气提示"找不到城市"**
 确认城市名拼写；中文城市在内置别名表中（北京/上海/广州/深圳等 18 个），其他可用英文。

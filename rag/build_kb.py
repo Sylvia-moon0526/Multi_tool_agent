@@ -8,8 +8,9 @@ from langchain_chroma import Chroma
 
 load_dotenv()
 
-KB_DIR = Path("./knowledge_base")
-CHROMA_DIR = "./chroma_db"
+BASE_DIR = Path(__file__).resolve().parent.parent
+KB_DIR = BASE_DIR / "knowledge_base"
+CHROMA_DIR = str(BASE_DIR / "chroma_db")
 
 
 def build():

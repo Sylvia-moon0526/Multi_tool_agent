@@ -42,11 +42,23 @@ def build_agent():
 
     return agent
 
+def extract_output(messages):
+    for m in reversed(messages):
+        if type(m).__name__ == "AIMessage" and not (getattr(m, "tool_calls", None) or []):
+            content = str(getattr(m, "content", "") or "")
+            if content.strip():
+                return content
+    for m in reversed(messages):
+        content = str(getattr(m, "content", "") or "")
+        if content.strip():
+            return content
+    return "抱歉，本次未能生成回答，请重试。"
+
+
 def run_agent(query:str):
     agent = build_agent()
     result = agent.invoke({"messages":[{"role":"user","content":query}]})
-    final_message = result["messages"][-1]
-    return final_message.content
+    return extract_output(result["messages"])
 
 if __name__ == "__main__":
     print("🤖 多工具调用 Agent 已启动")

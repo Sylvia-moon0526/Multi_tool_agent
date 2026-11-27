@@ -4,7 +4,7 @@ from langchain_core.tools import tool
 from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
 
-CHROMA_DIR = "./chroma_db"
+CHROMA_DIR = str(Path(__file__).resolve().parent.parent / "chroma_db")
 _retriever = None
 
 

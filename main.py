@@ -1,4 +1,4 @@
-from agent import build_agent
+from agent import build_agent, extract_output
 
 
 def main():
@@ -26,8 +26,7 @@ def main():
                 "messages": [{"role": "user", "content": user_input}]
             })
             
-            final_message = result["messages"][-1]
-            print(f"\nAgent: {final_message.content}\n")
+            print(f"\nAgent: {extract_output(result['messages'])}\n")
             
         except Exception as e:
             print(f"\n❌ 出错: {str(e)}\n")
